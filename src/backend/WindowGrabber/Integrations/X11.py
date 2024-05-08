@@ -44,6 +44,7 @@ class X11(Integration):
 
         self.start_active_window_change_thread()
 
+    @log.catch
     def _run_command(self, command: list[str]) -> subprocess.Popen:
         if self.flatpak:
             command.insert(0, "flatpak-spawn")
@@ -53,10 +54,12 @@ class X11(Integration):
         except Exception as e:
             log.error(f"An error occurred while running {command}: {e}")
 
+    @log.catch
     def start_active_window_change_thread(self):
         self.active_window_change_thread = WatchForActiveWindowChange(self)
         self.active_window_change_thread.start()
 
+    @log.catch
     def get_all_windows(self) -> list[Window]:
         windows: list[Window] = []
 
@@ -66,7 +69,10 @@ class X11(Integration):
                 return []
             stdout, stderr = root.communicate()
 
-            window_ids = stdout.decode().split("#")[1].strip().split(", ")
+            split = stdout.decode().split("#")
+            if len(split) < 2:
+                return windows
+            window_ids = split[1].strip().split(", ")
         except subprocess.CalledProcessError as e:
             log.error(f"An error occurred while running xprop: {e}")
             return windows
@@ -82,13 +88,17 @@ class X11(Integration):
 
         return windows
 
+    @log.catch
     def get_active_window(self) -> Window:
         try:
             root = self._run_command(["xprop", "-root", "_NET_ACTIVE_WINDOW"])
             if root is None:
                 return
             stdout, stderr = root.communicate()
-            window_id = stdout.strip().split()[-1]
+            split = stdout.strip().split()
+            if len(split) == 0:
+                return
+            window_id = split[-1]
         except subprocess.CalledProcessError as e:
             log.error(f"An error occurred while running xprop: {e}")
             return
@@ -101,6 +111,7 @@ class X11(Integration):
 
         return Window(class_name, title)
 
+    @log.catch
     def get_title(self, window_id: str) -> str:
         if window_id == "0x0":
             return
@@ -118,6 +129,7 @@ class X11(Integration):
             log.error(f"An error occurred while running xprop: {e}")
             return
 
+    @log.catch
     def get_class(self, window_id: str) -> str:
         if window_id == "0x0":
             return
@@ -153,4 +165,3 @@ class WatchForActiveWindowChange(threading.Thread):
 
             self.last_active_window = new_active_window
             self.x11.window_grabber.on_active_window_changed(new_active_window)
-

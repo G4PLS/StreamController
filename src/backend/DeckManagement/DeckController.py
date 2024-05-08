@@ -289,6 +289,7 @@ class DeckController:
         self.own_key_grid: "KeyGridChild" = None
 
         self.screen_saver = ScreenSaver(deck_controller=self)
+        self.allow_interaction = True
 
         self.spacing = (36, 36)
 
@@ -373,6 +374,8 @@ class DeckController:
             log.error(f"Failed to set deck key image. Error: {e}")
 
     def key_change_callback(self, deck, key, state):
+        if not self.allow_interaction:
+            return
         screensaver_was_showing = self.screen_saver.showing
         if state:
             # Only on key down this allows plugins to control screen saver without directly deactivating it
@@ -580,6 +583,11 @@ class DeckController:
 
         # Stop queued tasks
         self.clear_media_player_tasks()
+
+        old_tick = self.media_player.media_ticks
+        old_time = time.time()
+        while self.media_player.media_ticks <= old_tick and time.time() - old_time <= 0.5:
+            time.sleep(0.05)
 
         # Update ui
         GLib.idle_add(self.update_ui_on_page_change) #TODO: Use new signal manager instead
@@ -908,7 +916,8 @@ class BackgroundVideo(BackgroundVideoCache):
         self.active_frame += 1
 
         if self.active_frame >= self.n_frames:
-            self.active_frame = 0
+            if self.loop:
+                self.active_frame = 0
         
         return self.get_frame(self.active_frame)
     
@@ -1506,11 +1515,18 @@ class ControllerKey:
                         )) # Videos always update
 
             elif len(self.get_own_actions()) > 1:
-                with Image.open(os.path.join("Assets", "images", "multi_action.png")) as image:
-                    self.set_key_image(KeyImage(
-                        controller_key=self,
-                        image=image.copy(),
-                    ), update=False)
+                if page_dict.get("image-control-action") is None:
+                    with Image.open(os.path.join("Assets", "images", "multi_action.png")) as image:
+                        self.set_key_image(KeyImage(
+                            controller_key=self,
+                            image=image.copy(),
+                        ), update=False)
+            
+            elif len(self.get_own_actions()) == 1:
+                if page_dict.get("image-control-action") is None:
+                    self.set_key_image(None, update=False)
+                # action = self.get_own_actions()[0]
+                # if action.has_image_control()
 
             layout = KeyLayout(
                 fill_mode=page_dict.get("media", {}).get("fill-mode"),
